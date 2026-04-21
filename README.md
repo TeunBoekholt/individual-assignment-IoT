@@ -1,10 +1,21 @@
+
 # System Performance & Process Documentation
 Teun Boekholt
+
+
+## Walk-through of the system 
+1. Put all the code in the `src` folder in a new platformio project (I used VS code as an IDE)
+2. The `unused` folder contains different programs to put on the ESP32 depending on what you want to test:
+  * The `energy_measurer` is solely used to measure the energy with another ESP32 for the first question. The cod was not written by me but taken from https://andreavitaletti.github.io/IoT_short_course/energy/.
+  * The `oversampler` is used to just sample the generated signal at a frequency of 1000Hz. This one was used to measure energy consumption and data volume
+  * The two `adaptive_sampler` files are used for computing the FFT and adjusting the sampling rate, after which one of them sends it to a local edge server over WiFi, and the other sends it with LoRa to the TTN cloud
+3. For almost any test purposes the `adaptive_sampler_WiFi.cpp` should be enough, so loading this one on an ESP32 is the recommended course of action
+4. For getting certain measurement, the section on Performance Measurements describes what commands to use to get them.
 
 ## Process Documentation
 Initially, I attempted to manage everything within the `IRAM_ATTR` without using RTOS tasks. When this approach proved unsuccessful, I transitioned to the dual ESP32 setup described in class and on GitHub. However, due to limited hardware experience, I encountered issues with this configuration.
 
-Ultimately, I settled on a **single ESP32 using FreeRTOS tasks**. This architecture yielded relatively good results for generating the signal, calculating the FFT, adapting the sampling rate, and averaging the signal over a 5-second window.
+Ultimately, I settled on a **single ESP32 using FreeRTOS tasks**. This architecture yielded relatively good results for generating the signal, calculating the FFT, adapting the sampling rate, and averaging the signal over a 5-second window. The only problem with this implementation was the ability to get energy savings by going into sleep mode. More on that later. 
 
 ---
 
@@ -12,7 +23,7 @@ Ultimately, I settled on a **single ESP32 using FreeRTOS tasks**. This architect
 
 ### 1. Energy Savings
 * **Oversampled Signal (100 Hz):** Consistent 60 mA usage.
-* **Adaptive Sampler (10 Hz):** `[Insert Value here]` mA. 
+* **Adaptive Sampler (10 Hz):** Consistent 60 mA usage with spikes for WiFi transmitting. 
 
 ### 2. Per-Window Execution Time
 I measured the execution time by recording the timestamp before the window execution (averaging and transmitting) and when it completed.
@@ -36,6 +47,9 @@ As you can see both of them consisted of 24 packets (60 seconds / 5 seconds wind
 ### 4. End-to-End Latency
 
 I used the `<sys/time.h>` library to synchronize the ESP32's clock with my MacBook. I send a timestamp within the payload and compare it to the time `tshark` receives it. By converting the hex capture to ASCII and subtracting the publish time from the receive time, I get the exact latency.
+
+<img width="619" height="204" alt="Scherm­afbeelding 2026-04-20 om 19 54 43" src="https://github.com/user-attachments/assets/cc39e1a2-3281-492f-88ed-6c8be666cfa4" />
+
 
 | Arrival Time (ms) | Decoded JSON Payload | Generation Time (ms) | Latency |
 | :--- | :--- | :--- | :--- |
