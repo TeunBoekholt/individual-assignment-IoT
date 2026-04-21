@@ -29,7 +29,13 @@ mosquitto_sub -h localhost -t v1/devices/me/telemetry
 ## Process Documentation
 Initially, I attempted to manage everything within the `IRAM_ATTR` without using RTOS tasks. When this approach proved unsuccessful, I transitioned to the dual ESP32 setup described in class and on GitHub. However, due to limited hardware experience, I encountered issues with this configuration.
 
-Ultimately, I settled on a **single ESP32 using FreeRTOS tasks**. This architecture yielded relatively good results for generating the signal, calculating the FFT, adapting the sampling rate, and averaging the signal over a 5-second window. The only problem with this implementation was the ability to get energy savings by going into sleep mode. More on that later. 
+Ultimately, I settled on a **single ESP32 using FreeRTOS tasks**. This architecture yielded relatively good results for generating the signal, calculating the FFT, adapting the sampling rate, and averaging the signal over a 5-second window. The only problems with this implementation were the inability to get energy savings by going into sleep mode and the fact that FreeRTOS ticks are 1ms, meaning it's not possible with the tasks to sample at more than 1000Hz. This is why the highest frequecny you will encounter in my implemenation is 1000Hz, which still significantly oversamples my chosen signal, but doesn't come close to the actual maximum sampling frequency of the device.
+
+My chosen signal:
+
+``` bash
+2 * sin(2 * PI * 3 * t) + 4 * sin(2 * PI * 5 * t)
+```
 
 ---
 
@@ -101,3 +107,5 @@ I have attached a `LLM.cpp` file which is the result of me basically copying the
 * The LLM gives the LoRa task highest priority because of 'timing'. In my implementation I purposefully didn't do this because I want to always prioritize generating and sampling the signal. To me it seems acceptable to have the LoRa transmission be a little late, though we don't want to miss any samples.
 * The LLM uses LMIC, which (as I understand it) is a library used for briding the gap between LoRa (the physical hardware) and LoRaWAN (the networking protocol)
 * The LLM adds a 10% safety margin to the Nyquist Frequency.
+* The LLM uses mutexes, which it explained – after I prompted it some more – are basically keys used for the synchronous used of variables to prevent (for example) one task from writing variables that are currently being read. This actually seems like very useful functionality, and in hindsight I will look into for designing the FreeRTOS pipeline for our group project.
+* The LLM doesn't specify for each task what core to use. It explained it did so as to 
