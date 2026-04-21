@@ -10,7 +10,7 @@ Before running any code you need to have one ESP32 LoRa Heltec V3 for doing the 
 The set-up steps:
 1. Clone the repository and put all the code in the `src` folder in a new platformio project (I used VS code as an IDE)
 2. The `unused` folder contains different programs to put on the ESP32 depending on what you want to test:
-  * The `energy_measurer` is solely used to measure the energy with another ESP32 for the first question. The cod was not written by me but taken from https://andreavitaletti.github.io/IoT_short_course/energy/.
+  * The `energy_measurer` is solely used to measure the energy with another ESP32 for the first question. The code was not written by me but taken from https://andreavitaletti.github.io/IoT_short_course/energy/.
   * The `oversampler` is used to just sample the generated signal at a frequency of 1000Hz. This one was used to measure energy consumption and data volume
   * The two `adaptive_sampler` files are used for computing the FFT and adjusting the sampling rate, after which one of them sends it to a local edge server over WiFi, and the other sends it with LoRa to the TTN cloud
 3. For almost any test purposes the `adaptive_sampler_WiFi.cpp` should be enough, so loading this one on an ESP32 is the recommended course of action
