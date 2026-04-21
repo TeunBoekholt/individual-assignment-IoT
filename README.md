@@ -49,7 +49,7 @@ As you can see both of them consisted of 24 packets (60 seconds / 5 seconds wind
 I used the `<sys/time.h>` library to synchronize the ESP32's clock with my MacBook. I send a timestamp within the payload and compare it to the time `tshark` receives it. The following tshark command listens on port 1883 and makes it easy to compare the 'received' timestamp with the 'published' timestamp:
 
 ``` bash
-sudo tshark -i en0 -f "host 192.168.1.49 and port 1883" -Y "mqtt.msg" -T fields -e frame.time_epoch -e mqtt.msg
+sudo tshark -i en0 -f "host [IP] and port 1883" -Y "mqtt.msg" -T fields -e frame.time_epoch -e mqtt.msg
 ```
 Screenshot of some results:
 
