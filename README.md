@@ -29,12 +29,7 @@ sudo tshark -i en0 -f "host [IP] and port 1883" -a duration:60 -w [NAME].pcap
 ```
 
 **Results & Analysis:**
-* **Packet Count:** Both captures consisted of **24 packets**. This matches the expected logic: a 60-second capture with a 5-second transmission window results in 12 MQTT Publish packets, each followed by a TCP Acknowledgement (ACK) response from the server.
-* **Total Size:** **3028 bytes**.
-* **Individual Packet Analysis:** While the JSON payload itself is only **16 bytes**, the average packet size recorded was ~126 bytes.
-
-**Why the size is the same:**
-Even though the sampling frequency was reduced, the transmission frequency remained fixed at 5-second intervals. This serves as a primary example of communication overhead; the network volume is dominated by protocol headers (Ethernet, IP, TCP, and MQTT) rather than the sensor data itself.
+As you can see both of them consisted of 24 packets (60 seconds / 5 seconds windos * 2 (the ACK response from TCP)), for a total size of 3028 bytes, which is larger than expected. The JSON payload should only be 16 bytes (16 characters), while 3028 / 24 = 126. All these extra bytes are most probably caused by the networking overhead (all the headers).
 
 
 ### 4. End-to-End Latency
