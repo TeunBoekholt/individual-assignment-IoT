@@ -5,13 +5,26 @@ boekholt.2284223@studenti.uniroma1.it
 
 
 ## Walk-through of the system 
-1. Put all the code in the `src` folder in a new platformio project (I used VS code as an IDE)
+Before running any code you need to have one ESP32 LoRa Heltec V3 for doing the generation of the signal, sampling and the the transmission over WiFi and LoRa. To measure energy you also need an INA219 and another ESP32 dev board.
+
+The set-up steps:
+1. Clone the repository and put all the code in the `src` folder in a new platformio project (I used VS code as an IDE)
 2. The `unused` folder contains different programs to put on the ESP32 depending on what you want to test:
   * The `energy_measurer` is solely used to measure the energy with another ESP32 for the first question. The cod was not written by me but taken from https://andreavitaletti.github.io/IoT_short_course/energy/.
   * The `oversampler` is used to just sample the generated signal at a frequency of 1000Hz. This one was used to measure energy consumption and data volume
   * The two `adaptive_sampler` files are used for computing the FFT and adjusting the sampling rate, after which one of them sends it to a local edge server over WiFi, and the other sends it with LoRa to the TTN cloud
 3. For almost any test purposes the `adaptive_sampler_WiFi.cpp` should be enough, so loading this one on an ESP32 is the recommended course of action
-4. For getting certain measurement, the section on Performance Measurements describes what commands to use to get them.
+4. For getting certain measurements, the section on Performance Measurements describes what commands to use to get them.
+5. For using WiFi, make sure to have Mosquitto MQTT broker installed and to put in your WiFi credentials and edge server IP at the top of the code. To listen to incoming messages from the ESP32 use the following command (on mac):
+``` bash
+mosquitto_sub -h localhost -t v1/devices/me/telemetry
+```
+6. For using LoRa, make sure to have your ESP32 registered as a device in the TTN console. For my code it has to be an OTAA device, meaning you should see an AppKey and a DevEUI key in the overview like shown below. These should be put into the fields of my code. To succesfully have the LoRa payload be picked up, the ESP32 needs to be in range of a TTN gateway.
+
+<img width="522" height="295" alt="Scherm­afbeelding 2026-04-21 om 11 07 45" src="https://github.com/user-attachments/assets/30a2dc31-077c-4d5a-9f32-7608c05160ee" />
+
+<img width="488" height="182" alt="Scherm­afbeelding 2026-04-21 om 11 07 56" src="https://github.com/user-attachments/assets/3f8aa98e-5d99-4562-a40b-f04fb19aa47e" />
+
 
 ## Process Documentation
 Initially, I attempted to manage everything within the `IRAM_ATTR` without using RTOS tasks. When this approach proved unsuccessful, I transitioned to the dual ESP32 setup described in class and on GitHub. However, due to limited hardware experience, I encountered issues with this configuration.
