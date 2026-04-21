@@ -1,6 +1,7 @@
 
 # System Performance & Process Documentation
-Teun Boekholt
+Teun Boekholt, 2284223
+boekholt.2284223@studenti.uniroma1.it
 
 
 ## Walk-through of the system 
@@ -22,8 +23,17 @@ Ultimately, I settled on a **single ESP32 using FreeRTOS tasks**. This architect
 ## Performance Measurements
 
 ### 1. Energy Savings
-* **Oversampled Signal (100 Hz):** Consistent 60 mA usage.
-* **Adaptive Sampler (10 Hz):** Consistent 60 mA usage with spikes for WiFi transmitting. 
+Since I am running everything on my macbook I couldn't use the Serial Plotter, that's why I used the VScode extention 'Teleplot' to visualize the energy measurements. The results:
+
+* **Oversampled Signal (1000 Hz):** Consistent 60 mA usage.
+* **Adaptive Sampler (10 Hz):** Consistent 60 mA usage with spikes for WiFi transmitting.
+
+The fact that I see a negligible difference between the oversampled and adapted sampled signal actually makes sense for my implementation. Significant energy savings could only be achieved by having the ESP32 enter sleep mode between performing its sampling tasks. When sampling at 10Hz (which would be optimal for my chosen signal) the system in theory has enough time to enter and exit sleep mode before having to take its next sample, thus saving energy.
+
+However, in my implementation the generation of the signal is also a FreeRTOS task which occurs every ms. Therefore the system won't enter sleep mode, as it notices that the latency of the sleep policy would be too high. 
+
+If one were to actually prioritize saving energy, in this case it would be possible to move the generation of the signal within the Sampling taks, as the signal value is used nowhere else. In this way the generation function doesn't have to be called every miliseconds and the system has time to enter and exit sleep mode.
+
 
 ### 2. Per-Window Execution Time
 I measured the execution time by recording the timestamp before the window execution (averaging and transmitting) and when it completed.
