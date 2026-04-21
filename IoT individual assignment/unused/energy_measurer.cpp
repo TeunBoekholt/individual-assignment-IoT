@@ -58,8 +58,8 @@ void loop(void)
   // Serial.print(loadvoltage);
   //Serial.print(",");
   // Serial.print("\t");
-  Serial.print(">Signal:");
-  Serial.print(current_mA);
+  Serial.print(">current_mA:"); 
+  Serial.println(current_mA);
   //Serial.print(",");
   // Serial.print("\t");
   // Serial.println(power_mW);
