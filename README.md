@@ -42,17 +42,26 @@ My chosen signal (actually just the same as the example one in the assignment):
 ## Performance Measurements
 
 ### 1. Energy Savings
-Since I am running everything on my macbook I couldn't use the Serial Plotter, that's why I used the VScode extention 'Teleplot' to visualize the energy measurements. The results:
+Below is a diagram of my energy measuring setup.
 
-* **Oversampled Signal (1000 Hz):** Consistent 60 mA usage.
-* **Adaptive Sampler (10 Hz):** Consistent 60 mA usage with spikes for WiFi transmitting.
+<img width="671" height="384" alt="Scherm­afbeelding 2026-04-21 om 18 42 36" src="https://github.com/user-attachments/assets/33ba6b6a-7677-4121-8b3d-c74490d432b8" />
 
-The fact that I see a negligible difference between the oversampled and adapted sampled signal actually makes sense for my implementation. Significant energy savings could only be achieved by having the ESP32 enter sleep mode between performing its sampling tasks. When sampling at 10Hz (which would be optimal for my chosen signal) the system in theory has enough time to enter and exit sleep mode before having to take its next sample, thus saving energy.
+Since I am running everything on my macbook I couldn't use the Serial Plotter, that's why I used the VScode extention 'Teleplot' to visualize the energy measurements. The results over a 5-second window:
+
+* **Oversampled Signal (1000 Hz):** Base 45 mA usage with energy spikes very often.
+<img width="568" height="431" alt="oversampled" src="https://github.com/user-attachments/assets/843cbd5a-d4fe-4b55-b0dc-94a39d397db2" />
+As you can see in the image above the ESP32 almost never rests with the oversampling setup, the energy consumption is extremely jittery. If I had to make a guess for its cause it is because I am still printing the signal value in the `Oversampler` code, leading to the ESP32 having to print to the serial monitor 1000 times a second. This is a constly operation and could be the cause of the jitter. Otherwise it might just be the fact that the FreeRTOS scheduler has to manage a task that wakes up 1000 times a second.
+
+
+* **Adaptive Sampler (10 Hz):** Consistent 45 mA usage with spikes for WiFi transmitting.
+<img width="559" height="384" alt="adaptive" src="https://github.com/user-attachments/assets/41ba56c9-a5c9-4d19-a001-3899d5a3e290" />
+The fact that I see a negligible difference between the oversampled and adapted sampled BASE signal actually makes sense for my implementation. Significant energy savings could only be achieved by having the ESP32 enter sleep mode between performing its sampling tasks. When sampling at 10Hz (which would be optimal for my chosen signal) the system in theory has enough time to enter and exit sleep mode before having to take its next sample, thus saving energy.
 
 However, in my implementation the generation of the signal is also a FreeRTOS task which occurs every ms. Therefore the system won't enter sleep mode, as it notices that the latency of the sleep policy would be too high. 
 
 If one were to actually prioritize saving energy, in this case it would be possible to move the generation of the signal within the Sampling taks, as the signal value is used nowhere else. In this way the generation function doesn't have to be called every miliseconds and the system has time to enter and exit sleep mode.
 
+Lastly, the higher energy spikes in this implementation are likely caused by the more computationally heavy calling of the WiFi transmitting task and the FFT computation. A good sign is that at least you can see that the spikes are less frequent than for the oversampled implementation.
 
 ### 2. Per-Window Execution Time
 I measured the execution time by recording the timestamp before the window execution (averaging and transmitting) and when it completed.
