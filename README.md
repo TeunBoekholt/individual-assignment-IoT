@@ -27,13 +27,15 @@ To capture the transmission data over Wi-Fi for 60 seconds (for both the oversam
 ```bash
 sudo tshark -i en0 -f "host [IP] and port 1883" -a duration:60 -w [NAME].pcap
 ```
+<img width="243" height="85" alt="Scherm­afbeelding 2026-04-20 om 18 20 54" src="https://github.com/user-attachments/assets/d6ade2dd-74c4-4fa1-b286-facebd69e2f1" />
 
 **Results & Analysis:**
 As you can see both of them consisted of 24 packets (60 seconds / 5 seconds windos * 2 (the ACK response from TCP)), for a total size of 3028 bytes, which is larger than expected. The JSON payload should only be 16 bytes (16 characters), while 3028 / 24 = 126. All these extra bytes are most probably caused by the networking overhead (all the headers).
 
 
 ### 4. End-to-End Latency
-I used the `<sys/time.h>` library to synchronize the ESP32's clock with my MacBook. We send a timestamp within the payload and compare it to the time `tshark` receives it. By converting the hex capture to ASCII and subtracting the publish time from the receive time, we get the exact latency.
+
+I used the `<sys/time.h>` library to synchronize the ESP32's clock with my MacBook. I send a timestamp within the payload and compare it to the time `tshark` receives it. By converting the hex capture to ASCII and subtracting the publish time from the receive time, I get the exact latency.
 
 | Arrival Time (ms) | Decoded JSON Payload | Generation Time (ms) | Latency |
 | :--- | :--- | :--- | :--- |
