@@ -26,3 +26,26 @@ I measured the execution time by recording the timestamp before the window execu
 To capture the transmission data over Wi-Fi for 60 seconds (for both the oversampled and adapted signals), I used the following `tshark` command:
 ```bash
 sudo tshark -i en0 -f "host [IP] and port 1883" -a duration:60 -w [NAME].pcap
+```
+
+**Results & Analysis:**
+* **Packet Count:** Both captures consisted of **24 packets**. This matches the expected logic: a 60-second capture with a 5-second transmission window results in 12 MQTT Publish packets, each followed by a TCP Acknowledgement (ACK) response from the server.
+* **Total Size:** **3028 bytes**.
+* **Individual Packet Analysis:** While the JSON payload itself is only **16 bytes**, the average packet size recorded was ~126 bytes.
+
+**Why the size is the same:**
+Even though the sampling frequency was reduced, the transmission frequency remained fixed at 5-second intervals. This serves as a primary example of communication overhead; the network volume is dominated by protocol headers (Ethernet, IP, TCP, and MQTT) rather than the sensor data itself.
+
+
+### 4. End-to-End Latency
+I used the `<sys/time.h>` library to synchronize the ESP32's clock with my MacBook. We send a timestamp within the payload and compare it to the time `tshark` receives it. By converting the hex capture to ASCII and subtracting the publish time from the receive time, we get the exact latency.
+
+| Arrival Time (ms) | Decoded JSON Payload | Generation Time (ms) | Latency |
+| :--- | :--- | :--- | :--- |
+| 1776707392863 | `{"average": 0.01, "ts": 1776707392848}` | 1776707392848 | **15 ms** |
+| 1776707397909 | `{"average": 0.01, "ts": 1776707397863}` | 1776707397863 | **46 ms** |
+| 1776707402925 | `{"average": 0.01, "ts": 1776707402878}` | 1776707402878 | **47 ms** |
+| 1776707407908 | `{"average": 0.00, "ts": 1776707407893}` | 1776707407893 | **15 ms** |
+| 1776707412962 | `{"average": -0.03, "ts": 1776707412908}`| 1776707412908 | **54 ms** |
+
+**Conclusion:** The system experiences a network latency ranging between **15 ms and 54 ms**.
