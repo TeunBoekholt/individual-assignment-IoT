@@ -6,9 +6,9 @@
 #include <sys/time.h>
 
 // --- Networking Credentials ---
-const char* ssid = "Wind3 HUB-7D05D0";
-const char* password = "32wxbpndedmzjsi9";
-const char* mqtt_server = "192.168.1.49"; 
+const char* ssid = "PUT WIFI NETWORK NAME";
+const char* password = "PUT WIFI PASSWORD";
+const char* mqtt_server = "PUT SERVER IP"; 
 
 // –––– Commands to run in terminal –––––:
 // mosquitto_sub -h localhost -t v1/devices/me/telemetry
