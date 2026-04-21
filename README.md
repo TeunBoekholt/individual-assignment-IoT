@@ -46,9 +46,16 @@ As you can see both of them consisted of 24 packets (60 seconds / 5 seconds wind
 
 ### 4. End-to-End Latency
 
-I used the `<sys/time.h>` library to synchronize the ESP32's clock with my MacBook. I send a timestamp within the payload and compare it to the time `tshark` receives it. By converting the hex capture to ASCII and subtracting the publish time from the receive time, I get the exact latency.
+I used the `<sys/time.h>` library to synchronize the ESP32's clock with my MacBook. I send a timestamp within the payload and compare it to the time `tshark` receives it. The following tshark command listens on port 1883 and makes it easy to compare the 'received' timestamp with the 'published' timestamp:
+
+``` bash
+sudo tshark -i en0 -f "host 192.168.1.49 and port 1883" -Y "mqtt.msg" -T fields -e frame.time_epoch -e mqtt.msg
+```
+Screenshot of some results:
 
 <img width="619" height="204" alt="Scherm­afbeelding 2026-04-20 om 19 54 43" src="https://github.com/user-attachments/assets/cc39e1a2-3281-492f-88ed-6c8be666cfa4" />
+
+By converting the hex capture to ASCII and subtracting the publish time from the receive time, I get the exact latency.
 
 
 | Arrival Time (ms) | Decoded JSON Payload | Generation Time (ms) | Latency |
