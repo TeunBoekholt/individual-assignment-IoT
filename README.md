@@ -31,7 +31,7 @@ Initially, I attempted to manage everything within the `IRAM_ATTR` without using
 
 Ultimately, I settled on a **single ESP32 using FreeRTOS tasks**. This architecture yielded relatively good results for generating the signal, calculating the FFT, adapting the sampling rate, and averaging the signal over a 5-second window. The only problems with this implementation were the inability to get energy savings by going into sleep mode and the fact that FreeRTOS ticks are 1ms, meaning it's not possible with the tasks to sample at more than 1000Hz. This is why the highest frequecny you will encounter in my implemenation is 1000Hz, which still significantly oversamples my chosen signal, but doesn't come close to the actual maximum sampling frequency of the device.
 
-My chosen signal:
+My chosen signal (actually just the same as the example one in the assignment):
 
 ``` bash
 2 * sin(2 * PI * 3 * t) + 4 * sin(2 * PI * 5 * t)
