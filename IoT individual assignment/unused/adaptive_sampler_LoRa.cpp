@@ -44,27 +44,15 @@ void vLoRaTask(void *pvParameters) {
   Serial.println("Initializing LoRa");
   
   int state = radio.begin();
-  if (state >= RADIOLIB_ERR_NONE) {
-    Serial.println("success");
-  } else {
-    Serial.printf("failed, code %d\n", state);
-    while (true) { vTaskDelay(1000); }
-  }
 
   node.beginOTAA(joinEUI, devEUI, nwkKey, appKey);
+  
   state = node.activateOTAA();
 
   // Sometimes the session is lost, so a reconnection attempt is needed
-  if (state == -1116) {
-    Serial.println("Session not found, performing fresh OTAA join");
+  if (state == -1116 || state == -1101) {
+    Serial.println("Activation failed or no join accept. Retrying join");
     state = node.activateOTAA();
-  }
-  
-  if (state >= RADIOLIB_ERR_NONE || state == RADIOLIB_LORAWAN_NEW_SESSION) {
-    Serial.println("Activated");
-  } else {
-    Serial.printf("Activation failed, code %d\n", state);
-    while (true) { vTaskDelay(1000); } // Stop here if it fails
   }
 
   float receivedAverage;
@@ -192,6 +180,7 @@ void TaskFFT(void *pvParameters) {
     double highestPrevalentFreq = 0.0;
     
     // Go backwards through the spectrum to find the highest prevalent frequency above the threshold
+
     for (int i = (SAMPLES / 2) - 1; i > 0; i--) {
       if (readyFFTBuffer[i] > threshold) {
         highestPrevalentFreq = i * (currentSamplingFreq / (double)SAMPLES);
@@ -201,6 +190,11 @@ void TaskFFT(void *pvParameters) {
 
     if (highestPrevalentFreq > 0.0) { // Safety check to avoid division by zero 
       samplingInterval = pdMS_TO_TICKS(1000 / (2 * highestPrevalentFreq));
+
+      // Update the FFT object with the new sampling frequency
+      double samplingFreq = 1000.0 / (pdTICKS_TO_MS(samplingInterval));
+      FFT = ArduinoFFT<double>(readyFFTBuffer, (useFirstBuffer ? vImag1 : vImag2), SAMPLES, samplingFreq); 
+      
       Serial.printf("Highest Prevalent Freq: %.2f Hz\n", highestPrevalentFreq);
     } else {
       Serial.println("No prevalent frequency found. Keeping current interval.");
