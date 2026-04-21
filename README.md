@@ -90,3 +90,14 @@ By converting the hex capture to ASCII and subtracting the publish time from the
 | 1776707412962 | `{"average": -0.03, "ts": 1776707412908}`| 1776707412908 | **54 ms** |
 
 **Conclusion:** The system experiences a network latency ranging between **15 ms and 54 ms**.
+
+
+---
+
+## LLM Performance
+
+I have attached a `LLM.cpp` file which is the result of me basically copying the assingment in Gemini and asking it to write a C++ script to perform everything. Some intersting things I noted:
+* Probably the largest shortcoming of the LLM is that it doesn't seme to have understood correctly what the desired frequency is. Gemini just takes the `MajorPeak()` function from the `FFT` library and then determines this is the highest prevalent frequency (which we know it is not, it's just the MOST prevalent frequency). This could potentially lead to severe undersampling of the signal if the most prevalent frequency is much lower than the highest prevalent frequency. 
+* The LLM gives the LoRa task highest priority because of 'timing'. In my implementation I purposefully didn't do this because I want to always prioritize generating and sampling the signal. To me it seems acceptable to have the LoRa transmission be a little late, though we don't want to miss any samples.
+* The LLM uses LMIC, which (as I understand it) is a library used for briding the gap between LoRa (the physical hardware) and LoRaWAN (the networking protocol)
+* The LLM adds a 10% safety margin to the Nyquist Frequency.
