@@ -6,11 +6,11 @@
 #include <sys/time.h>
 
 // --- Networking Credentials ---
-const char* ssid = "PUT WIFI NETWORK NAME";
-const char* password = "PUT WIFI PASSWORD";
-const char* mqtt_server = "PUT SERVER IP"; 
+const char* ssid = "XXXXX"; // Wifi name
+const char* password = "XXXXX"; // Wifi password
+const char* mqtt_server = "XXXX";  // Server IP
 
-// –––– Commands to run in terminal –––––:
+// –––– Commands to run in terminal –––––
 // mosquitto_sub -h localhost -t v1/devices/me/telemetry
 // mosquitto -c mosquitto.conf
 
@@ -49,7 +49,6 @@ void vMQTTTask(void *pvParameters) {
 
   while (1) {
     if (xQueueReceive(averageQueue, &receivedAverage, portMAX_DELAY) == pdPASS) {
-      Serial.println(WiFi.localIP());
 
       // Connect to Wi-Fi
       if (WiFi.status() != WL_CONNECTED) {
@@ -74,7 +73,7 @@ void vMQTTTask(void *pvParameters) {
         }
       }
 
-      // Send the Data
+      // Sending the Data
       if (mqttClient.connected()) {
 
         // Aliging the timestamp with the moment of data generation by getting the current time right before publishing
@@ -128,6 +127,7 @@ void vSamplerTask(void *pvParameters) {
 
         float windowAverage = sum / count;
         Serial.printf("Average Signal Value over last 5 seconds: %.2f\n", windowAverage);
+        Serial.printf("Current sampling frequency: %.2f Hz\n", 1000.0 / pdTICKS_TO_MS(samplingInterval));
         // Send the average to the MQTT task via the queue
         xQueueSend(averageQueue, &windowAverage, portMAX_DELAY);
         sum = 0.0;
@@ -210,6 +210,11 @@ void TaskFFT(void *pvParameters) {
     if (highestPrevalentFreq > 0.0) { // Safety check to avoid division by zero 
       // COMMENT the following line to stop the adaptive sampling and keep the initial sampling frequency (for measuring)
       samplingInterval = pdMS_TO_TICKS(1000 / (2 * highestPrevalentFreq));
+
+      // Update the FFT object with the new sampling frequency
+      double samplingFreq = 1000.0 / (pdTICKS_TO_MS(samplingInterval));
+      FFT = ArduinoFFT<double>(readyFFTBuffer, (useFirstBuffer ? vImag1 : vImag2), SAMPLES, samplingFreq); 
+      
       Serial.printf("Highest Prevalent Freq: %.2f Hz\n", highestPrevalentFreq);
     } else {
       Serial.println("No prevalent frequency found. Keeping current interval.");
