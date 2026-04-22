@@ -50,7 +50,7 @@ Since I am running everything on my macbook I couldn't use the Serial Plotter, t
 
 * **Oversampled Signal (1000 Hz):** Base 45 mA usage with energy spikes very often.
 <img width="568" height="431" alt="oversampled" src="https://github.com/user-attachments/assets/843cbd5a-d4fe-4b55-b0dc-94a39d397db2" />
-As you can see in the image above the ESP32 almost never rests with the oversampling setup, the energy consumption is extremely jittery. If I had to make a guess for its cause it is because I am still printing the signal value in the `Oversampler` code, leading to the ESP32 having to print to the serial monitor 1000 times a second. This is a constly operation and could be the cause of the jitter. Otherwise it might just be the fact that the FreeRTOS scheduler has to manage a task that wakes up 1000 times a second.
+As you can see in the image above the ESP32 almost never rests with the oversampling setup, the energy consumption is extremely jittery. This is mainly caused be the fact that the FreeRTOS scheduler has to manage two tasks that wake up 1000 times a second, which gives a lot of system overhead. 
 
 
 * **Adaptive Sampler (10 Hz):** Consistent 45 mA usage with spikes for WiFi transmitting.
