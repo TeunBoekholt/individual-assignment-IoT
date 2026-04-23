@@ -37,6 +37,123 @@ My chosen signal (actually just the same as the example one in the assignment):
 2 * sin(2 * PI * 3 * t) + 4 * sin(2 * PI * 5 * t)
 ```
 
+### Architecture Diagram
+
+``` mermaid
+%%{init: {'theme':'dark', 'themeVariables': { 'edgeLabelBackground':'#0d1117', 'primaryTextColor': '#c9d1d9', 'lineColor': '#8b949e'}}}%%
+graph TB
+    %% Definitions of outside entities
+    subgraph Core1 [CORE 1: Hard Real-Time]
+        direction TB
+        GenTask[vSignalGeneratorTask<br/>Priority: 3 Highest<br/>Period: 1 ms]
+        SamplerTask[vSamplerTask<br/>Priority: 2<br/>Period: Adaptive]
+    end
+
+    subgraph Core0 [CORE 0: Processing & Comms]
+        direction TB
+        FFTTask[TaskFFT<br/>Priority: 1]
+        MQTTTask[vMQTTTask<br/>Priority: 1]
+    end
+
+    %% Internal Data Entities
+    SignalVar((currentSignalValue))
+    IntervalVar((samplingInterval))
+    Queue[[averageQueue<br/>Size: 10]]
+    Notify((Task<br/>Notification))
+
+    subgraph Memory [Dual-Core Shared Memory]
+        subgraph PingPong [Ping-Pong Buffers]
+            Buf1[vReal1 / vImag1]
+            Buf2[vReal2 / vImag2]
+        end
+        ReadyPtr((readyFFTBuffer))
+    end
+
+    %% -- Connections & Data Flow --
+
+    %% Core 1 Internal
+    GenTask -->|Writes| SignalVar
+    SignalVar -->|Reads| SamplerTask
+
+    %% IPC: Sampler to MQTT
+    SamplerTask -->|Sends 5s Average| Queue
+    Queue -->|Receives| MQTTTask
+
+    %% Memory Management by Sampler
+    SamplerTask -->|Fills A| Buf1
+    SamplerTask -->|Fills B| Buf2
+    SamplerTask -->|Swaps Pointer| ReadyPtr
+
+    %% IPC: Sampler to FFT (Synchronization)
+    SamplerTask -->|Triggers| Notify
+    Notify -->|Wakes| FFTTask
+
+    %% FFT Data Access
+    ReadyPtr -.->|Points to Ready Data| FFTTask
+
+    %% Adaptive Feedback Loop
+    FFTTask -->|Updates| IntervalVar
+    IntervalVar -->|Controls Speed| SamplerTask
+
+    %% MQTT Output
+    MQTTTask -->|Publishes JSON| ThingsBoard[ThingsBoard<br/>via Mosquitto]
+
+    %% Styling optimized for GitHub Dark Mode
+    classDef task fill:#1f6feb22,stroke:#1f6feb,stroke-width:2px,color:#c9d1d9,rx:5,ry:5;
+    classDef var fill:#d2992222,stroke:#d29922,stroke-width:2px,stroke-dasharray: 5 5,color:#c9d1d9;
+    classDef queue fill:#23863622,stroke:#2ea043,stroke-width:2px,color:#c9d1d9;
+    classDef mem fill:#21262d,stroke:#30363d,stroke-width:2px,color:#c9d1d9;
+    classDef external fill:#8957e522,stroke:#8957e5,stroke-width:2px,stroke-dasharray: 5 5,color:#c9d1d9;
+
+    class GenTask,SamplerTask,FFTTask,MQTTTask task;
+    class SignalVar,IntervalVar,Notify,ReadyPtr var;
+    class Queue queue;
+    class Buf1,Buf2,Memory,PingPong mem;
+    class ThingsBoard external;
+
+    %% Make all arrows broader and visible against dark grey
+    linkStyle default stroke-width:3px,stroke:#8b949e,color:#c9d1d9;
+```
+
+### Maximum Sampling Frequency
+Since I am using the FreeRTOS I at first didn't know how to get to a sampling frequency above 1000Hz, seeing as the tick rate of FreeRTOS was configured on 1 tick = 1ms. In thend I managed to write a function that just read an analog pin (4) and incremented a counter every time it did so, resulting in a smapling frequency of `16.48KHz`. This is not the actual hardware limit, but for all purposes and signals considered for this project this maximum sampling frequency was more than sufficient – for all testing (except for one of the bonus signals) it was even enough to just start out sampling at 100Hz. 
+
+### Identify optimal sampling frequency
+
+Identifying the optimal sampling frequency was achieved by letting the a Sampler Task fill up an FFT buffer of size 1024 (which means we have a bin resolution of just under 1Hz). Once the buffer is full I used the `xTaskNotifyGive()` function to activate the FFT task, which first calculatest the most prevalent frequency, which it used to set a treshold (40% of the maximum frequency). Then we loop from back to front over all the bins to select the highest frequency which reaches the threshold. This frequency gets multiplied by 2 to get the Nyquist Freqenyc, which becomes the next sampling frequency.
+
+To prevent the Sampler Task writing values in the buffer while the FFT task is analyzing it, I used two (ping-pong) buffers which get swapped around.
+
+### Compute aggregate function over a window
+
+To compute the aggregate function over a 5-second window I used the following function inside the Sampler Task.
+
+``` bash
+sum += sampledData;
+count++;
+long currentTime = millis();
+if (currentTime - windowStartTime >= 5000) { // Every 5 seconds
+  
+  float windowAverage = sum / count;
+  
+  Serial.printf("Average Signal Value over last 5 seconds: %.2f\n", windowAverage);
+  // Send the average to the MQTT task via the queue
+  xQueueSend(averageQueue, &windowAverage, portMAX_DELAY);
+  sum = 0.0;
+  count = 0;
+  
+  windowStartTime = currentTime;
+}
+```
+
+### Communicate the aggregate value to the nearby server
+
+### Communicate the aggregate value to the cloud
+
+<img width="1130" height="362" alt="Scherm­afbeelding 2026-04-20 om 16 36 09" src="https://github.com/user-attachments/assets/edb2c289-6d03-4e22-b5a1-941658d349a9" />
+
+
+
 ---
 
 ## Performance Measurements
@@ -137,7 +254,7 @@ When testing my code on a higher frequency signal (in this case 200 Hz) I notice
 
 <img width="482" height="408" alt="Scherm­afbeelding 2026-04-22 om 21 38 14" src="https://github.com/user-attachments/assets/88c70ce9-4c64-4b55-88de-a8a5517d5350" />
 
-### 2. Varying-frequency signal
+### 3. Varying-frequency signal
 
 As a final test I implemented a signal that changed its frequency every 10 seconds from 5 Hz to 40 Hz and the other way around after another 10 seconds. As expected, my program had trouble correctly sampling this signal. As soon as the FFT calculates a highest prevalent frequency of 5 Hz (which is correct for the first signal) the sampling rate gets adjusted to 10Hz. Unfortunately this is not high enough to correctly sample the 40 Hz signal, resulting in some aliasing (as can be seen in the graph below).
 
