@@ -109,6 +109,46 @@ By converting the hex capture to ASCII and subtracting the publish time from the
 
 ---
 
+## Bonus – testing three different signals
+
+### 1. Standard signal 
+
+``` bash
+2 * sin(2 * PI * 3 * t) + 4 * sin(2 * PI * 5 * t)
+```
+
+Below you can see the resulting graph of 10 second measurement of the standard signal using the adaptive sampling technique, which settled on a nyquist frequency of approximately 10 Hz.
+
+<img width="612" height="332" alt="Scherm­afbeelding 2026-04-22 om 20 41 25" src="https://github.com/user-attachments/assets/ef2e049f-b7d6-42db-b4bd-07511dc43ff5" />
+
+As you can see it is not a perfect representation of the original signal, as there are certain intervals for which the signal appears to get sampled quite noisily. However, the calculation of the average signal value was not hinered by this fact in this case. Still, seeing as the Nyquist frequency is a bare minimum sampling frequency, it might be good practice to up the actual sampling frequency to about 2.5x the highest prevalent frequency to get a better estimate.
+
+### 2. High-frequency signal 
+
+``` bash
+3 * sin(2 * PI * 200 * t)
+```
+
+When testing my code on a higher frequency signal (in this case 200 Hz) I noticed that at first the FFT kept estimating the highest prevalent frequency to be too low, leading to a gradual underestimation of the optimal sampling frequency. I investigated multiple possible causes for this underestimation, rangnig from checking my FFT bin resolutions to making sure the tick rate of my FreeRTOS was actually set to 1ms. In the end the issue was quite trivial, but here is what it was and how I fixed it:
+* After checking the magnitude values of the different frequency bins after the FFT was done I noticed that for the first FFT calculation there was quite a large number in the final bin (corresponding to 505Hz), probably due to a noise spike
+* My code then calculates the new sampling rate as follows: `samplingInterval = pdMS_TO_TICKS(1000.0 / (2.0 * 505))`, which leads to a function call `pdMS_TO_TICKS(0.99)`, which leads to C++ chopping off the decimal and an interval of 0 ticks
+* Because of this the sampler task is called at the CPU limit with no 1ms delay, leading to the buffer filling up in less than 1000ms even though the FFT function still expects a full buffer to have been collected over this timespan. Following this the new highest prevelant frequency gets calculated to be way too low and we enter the aliassing spiral.
+* **The fix** to this problem turned out to be pretty simple: just upping the threshold required to be selected as a **prevalent** frequency from 0.15 to 0.40 did the trick. Now the noise spike in the 505Hz bin wasn't seen as a prevalent frequency and everyhing worked as it should. The plot below shows the sampling over 1 second.
+
+<img width="482" height="408" alt="Scherm­afbeelding 2026-04-22 om 21 38 14" src="https://github.com/user-attachments/assets/88c70ce9-4c64-4b55-88de-a8a5517d5350" />
+
+### 2. Varying-frequency signal
+
+As a final test I implemented a signal that changed its frequency every 10 seconds from 5 Hz to 40 Hz and the other way around after another 10 seconds. As expected, my program had trouble correctly sampling this signal. As soon as the FFT calculates a highest prevalent frequency of 5 Hz (which is correct for the first signal) the sampling rate gets adjusted to 10Hz. Unfortunately this is not high enough to correctly sample the 40 Hz signal, resulting in some aliasing (as can be seen in the graph below).
+
+<img width="487" height="373" alt="Scherm­afbeelding 2026-04-22 om 21 45 51" src="https://github.com/user-attachments/assets/f44f12b5-a729-415a-80b9-2333756d84b3" />
+
+To fix this issue, a safety feature should be implemented where, after every so-many seconds, the system samples again at a high frequency. If we then discover a higher prevalent frequency than before we could either keep a new high sampling frequency or keep the adaptive sampling mechanism, also allowing for lowering the sampling freuquency again later on. 
+
+In the end I unfortunately did not have the time to implement this safety net, however. The same goes for the Filter bonus. 
+
+---
+
 ## LLM Performance
 
 I have attached a `LLM.cpp` file which is the result of me basically copying the assingment in Gemini and asking it to write a C++ script to perform everything. Some intersting things I noted:
