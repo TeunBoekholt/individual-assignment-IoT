@@ -6,17 +6,14 @@
 #include <sys/time.h>
 
 // --- Networking Credentials ---
-const char* ssid = "XXXXX"; // Wifi name
-const char* password = "XXXXX"; // Wifi password
-const char* mqtt_server = "XXXX";  // Server IP
+const char* ssid = "WIFI NAME";
+const char* password = "YOUR WIFI PASSWORD";
+const char* mqtt_server = "SERVER IP"; 
 
 // –––– Commands to run in terminal –––––
 // mosquitto_sub -h localhost -t v1/devices/me/telemetry
 // mosquitto -c mosquitto.conf
 
-
-// Acces token
-const char* thingsboard_token = "ODXliL6WvN1aEZEHIDLX"; 
 
 WiFiClient espClient;
 PubSubClient mqttClient(espClient);
@@ -95,10 +92,28 @@ void vMQTTTask(void *pvParameters) {
 // Signal Generator
 void vSignalGeneratorTask(void *pvParameters) {
   TickType_t xLastWakeTime = xTaskGetTickCount();
+  uint32_t cycleDuration = 20000;
 
   while (1) { 
     double t = micros() / 1000000.0;
+    // uint32_t currentMillis = millis();
+
     currentSignalValue = 2 * sin(2 * PI * 3 * t) + 4 * sin(2 * PI * 5 * t);
+    
+    // currentSignalValue = 3 * sin(2 * PI * 200 * t); // For testing the adaptive sampling with a higher frequency signal
+    
+    // Used for testing when swapping between two different frequencies 
+    // double activeFrequency = 0.0;
+    // uint32_t cycleTime = currentMillis % cycleDuration;
+
+    // if (cycleTime < 10000) {
+    //   activeFrequency = 5.0;
+    // } else {
+    //   activeFrequency = 40.0; 
+    // }
+    // currentSignalValue = 3 * sin(2 * PI * activeFrequency * t);
+
+
     vTaskDelayUntil(&xLastWakeTime, generationInterval);
   }
 }
@@ -117,6 +132,9 @@ void vSamplerTask(void *pvParameters) {
     if (i < SAMPLES) {
       float sampledData = currentSignalValue;
 
+      // Serial.print(">Signal:");
+      // Serial.println(sampledData);
+
       // ––––– Update the sum and count for the window calculation –––––––
       sum += sampledData;
       count++;
@@ -126,6 +144,7 @@ void vSamplerTask(void *pvParameters) {
         // long execStartTime = micros(); // used for calculating per-window execution time
 
         float windowAverage = sum / count;
+        
         Serial.printf("Average Signal Value over last 5 seconds: %.2f\n", windowAverage);
         Serial.printf("Current sampling frequency: %.2f Hz\n", 1000.0 / pdTICKS_TO_MS(samplingInterval));
         // Send the average to the MQTT task via the queue
@@ -148,9 +167,6 @@ void vSamplerTask(void *pvParameters) {
         vReal2[i] = sampledData;
         vImag2[i] = 0;
       }
-
-      // Serial.print(">Signal:");
-      // Serial.println(sampledData);
 
       i++;
       
@@ -197,7 +213,7 @@ void TaskFFT(void *pvParameters) {
     }
 
     // A threshold to identify significant frequencies using the max amplitude 
-    double threshold = maxAmplitude * 0.15; 
+    double threshold = maxAmplitude * 0.4; 
     double highestPrevalentFreq = 0.0;
     
     // Go backwards through the spectrum to find the highest prevalent frequency above the threshold
@@ -209,7 +225,7 @@ void TaskFFT(void *pvParameters) {
     }
     if (highestPrevalentFreq > 0.0) { // Safety check to avoid division by zero 
       // COMMENT the following line to stop the adaptive sampling and keep the initial sampling frequency (for measuring)
-      samplingInterval = pdMS_TO_TICKS(1000 / (2 * highestPrevalentFreq));
+      samplingInterval = pdMS_TO_TICKS(1000.0 / (2.0 * highestPrevalentFreq));
 
       // Update the FFT object with the new sampling frequency
       double samplingFreq = 1000.0 / (pdTICKS_TO_MS(samplingInterval));
@@ -225,7 +241,9 @@ void TaskFFT(void *pvParameters) {
 void setup() {
   Serial.begin(115200);
 
+  // I use a queue to avoid concurrency issues between Sampler and MQTT tasks
   averageQueue = xQueueCreate(10, sizeof(float));
+  vTaskDelay(pdMS_TO_TICKS(5000));
 
   // MQTT and FFT on core 0 to keep them away from the higher priority real-time tasks
   // FFT needs high stack size to to handle the large arrrays
