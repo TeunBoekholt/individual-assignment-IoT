@@ -5,10 +5,10 @@ boekholt.2284223@studenti.uniroma1.it
 
 
 ## Walk-through of the system 
-Before running any code you need to have one ESP32 LoRa Heltec V3 for doing the generation of the signal, sampling and the the transmission over WiFi and LoRa. To measure energy you also need an INA219 and another ESP32 dev board.
+Before running any code you need to have one ESP32 LoRa Heltec V3 for the generation of the signal, sampling and the transmission over WiFi and LoRa. To measure energy you also need an INA219 and another ESP32 dev board.
 
 The set-up steps:
-1. Clone the repository and put all the code in the `src` folder in a new platformio project (I used VS code as an IDE)
+1. Clone the repository and put all the code in the `src` folder in a new Platformio project (I used VS code as an IDE)
 2. The `unused` folder contains different programs to put on the ESP32 depending on what you want to test:
   * The `energy_measurer` is solely used to measure the energy with another ESP32 for the first question. The code was not written by me but taken from https://andreavitaletti.github.io/IoT_short_course/energy/.
   * The `oversampler` is used to just sample the generated signal at a frequency of 1000Hz. This one was used to measure energy consumption and data volume
@@ -19,7 +19,7 @@ The set-up steps:
 ``` bash
 mosquitto_sub -h localhost -t v1/devices/me/telemetry
 ```
-6. For using LoRa, make sure to have your ESP32 registered as a device in the TTN console. For my code it has to be an OTAA device, meaning you should see an AppKey and a DevEUI key in the overview like shown below. These should be put into the fields of my code. To succesfully have the LoRa payload be picked up, the ESP32 needs to be in range of a TTN gateway.
+6. For using LoRa, make sure to have your ESP32 registered as a device in the TTN Console. For my code it has to be an OTAA device, meaning you should see an AppKey and a DevEUI key in the overview like shown below. These should be put into the fields of my code. To succesfully have the LoRa payload be picked up, the ESP32 needs to be in range of a TTN gateway.
 
 <img width="522" height="295" alt="Scherm­afbeelding 2026-04-21 om 11 07 45" src="https://github.com/user-attachments/assets/30a2dc31-077c-4d5a-9f32-7608c05160ee" />
 
@@ -27,9 +27,9 @@ mosquitto_sub -h localhost -t v1/devices/me/telemetry
 
 
 ## Process Documentation
-Initially, I attempted to manage everything within the `IRAM_ATTR` without using RTOS tasks. When this approach proved unsuccessful, I transitioned to the dual ESP32 setup described in class and on GitHub. However, due to limited hardware experience, I encountered issues with this configuration.
+Initially, I attempted to manage everything within the `IRAM_ATTR` without using RTOS tasks. When this approach proved unsuccessful, I transitioned to the dual ESP32 (one for generating and one for sampling) setup described in class and on GitHub. However, due to my limited hardware experience, I encountered issues with this configuration.
 
-Ultimately, I settled on a **single ESP32 using FreeRTOS tasks**. This architecture yielded relatively good results for generating the signal, calculating the FFT, adapting the sampling rate, and averaging the signal over a 5-second window. The only problems with this implementation were the inability to get energy savings by going into sleep mode and the fact that FreeRTOS ticks are 1ms, meaning it's not possible with the tasks to sample at more than 1000Hz. This is why the highest frequecny you will encounter in my implemenation is 1000Hz, which still significantly oversamples my chosen signal, but doesn't come close to the actual maximum sampling frequency of the device.
+Ultimately, I settled on a **single ESP32 using FreeRTOS tasks**. This architecture yielded relatively good results for generating the signal, calculating the FFT, adapting the sampling rate, and averaging the signal over a 5-second window. The only problems with this implementation were the inability to get energy savings by going into sleep mode and the fact that FreeRTOS ticks are 1ms, meaning it's not practically feasible to sample at more than 1000Hz. This is why the highest frequecny you will encounter in my implemenation is 1000Hz, which still significantly oversamples my chosen signal, but doesn't come close to the actual maximum sampling frequency of the device, which I did actually try to measuer (more on that later).
 
 My chosen signal (actually just the same as the example one in the assignment):
 
@@ -89,11 +89,11 @@ graph TB
 ```
 
 ### Maximum Sampling Frequency
-Since I am using the FreeRTOS I at first didn't know how to get to a sampling frequency above 1000Hz, seeing as the tick rate of FreeRTOS was configured on 1 tick = 1ms. In thend I managed to write a function that just read an analog pin (4) and incremented a counter every time it did so, resulting in a smapling frequency of `16.48KHz`. This is not the actual hardware limit, but for all purposes and signals considered for this project this maximum sampling frequency was more than sufficient – for all testing (except for one of the bonus signals) it was even enough to just start out sampling at 100Hz. 
+Since I am using the FreeRTOS, I at first didn't know how to get to a sampling frequency above 1000Hz, seeing as the tick rate of FreeRTOS was configured to 1 tick = 1ms. In the end I managed to write a function that just read an analog pin (4) and incremented a counter every time it did so, resulting in a smapling frequency of `16.48KHz`. This is not the actual hardware limit, but for all purposes and signals considered for this project this maximum sampling frequency was more than sufficient – for all testing (except for one of the bonus signals) it was even enough to just start out sampling at 100Hz. 
 
 ### Identify optimal sampling frequency
 
-Identifying the optimal sampling frequency was achieved by letting the a Sampler Task fill up an FFT buffer of size 1024 (which means we have a bin resolution of just under 1Hz). Once the buffer is full I used the `xTaskNotifyGive()` function to activate the FFT task, which first calculatest the most prevalent frequency, which it used to set a treshold (40% of the maximum frequency). Then we loop from back to front over all the bins to select the highest frequency which reaches the threshold. This frequency gets multiplied by 2 to get the Nyquist Freqenyc, which becomes the next sampling frequency.
+Identifying the optimal sampling frequency was achieved by letting the a Sampler Task fill up an FFT buffer of size 1024 (which means we have a bin resolution of just under 1Hz). Once the buffer is full I used the `xTaskNotifyGive()` function to activate the FFT task, which first calculatest the most prevalent frequency, which it used to set a treshold (40% of the maximum frequency). Then we loop from back to front over all the bins to select the highest frequency which reaches the threshold. This frequency gets multiplied by 2 to get the Nyquist Frequency, which becomes the new sampling frequency.
 
 To prevent the Sampler Task writing values in the buffer while the FFT task is analyzing it, I used two (ping-pong) buffers which get swapped around.
 
@@ -121,13 +121,13 @@ if (currentTime - windowStartTime >= 5000) { // Every 5 seconds
 
 ### Communicate the aggregate value to the nearby server
 
-To send the aggregate value to a nearby edge server I used the Mosquito MQTT message broker. As you can seed in the previous code block for the aggregation calculatoin, I used a `QueueHandle_t` object to send to the MQTT Task. This is to prevent the writing of data to a variabel while the MQTT Task is busy with it. 
+To send the aggregate value to a nearby edge server I used the Mosquito MQTT message broker. As you can see in the previous code block for the aggregation calculatoin, I used a `QueueHandle_t` object to send to the MQTT Task. This is to prevent the writing of data to a variable while the MQTT Task is busy with it. 
 
 After being woken up by the receival of the Queue, the MQTT task connects to WiFi (it it hadn't done so before), connects to the MQTT broker and then puts the float into a JSON payload format. Initially I used a 16-byte (up to 19 with minus sign and frequency above 9.99) payload: `{"average": 0.00}`, but for measuring the end-to-end latency I also included a timestamp in the payload which was measured at the time of sending to compare to the time of receival. 
 
 ### Communicate the aggregate value to the cloud
 
-Setting up the LoRa communication was quite difficult for me. First I tried setting everything with APB, but in the end I settled for OTAA as this seemed like the standard approach. Also, there were some connection issues at first (mainly codes -1116 and -1101). Most of them were solved by a simple reconnection attempt, but it also proved necessary to reset the used DevNonces in the TTN Console Join Settings every time I tried to reconnect. In the end it worked though, and you can see some of the transmitted averages (which were decoded with a JavaScript formatter) that were transmitted and received. 
+Setting up the LoRa communication was quite difficult for me. First I tried setting everything with ABP, but in the end I settled for OTAA as this seemed like the standard approach. Also, there were some connection issues at first (mainly codes -1116 and -1101). Most of them were solved by a simple reconnection attempt, but it also proved necessary to reset the used DevNonces in the TTN Console Join Settings every time I tried to reconnect. In the end it worked though, and you can see some of the transmitted averages (which were decoded with a JavaScript formatter) that were received. 
 
 <img width="1130" height="362" alt="Scherm­afbeelding 2026-04-20 om 16 36 09" src="https://github.com/user-attachments/assets/edb2c289-6d03-4e22-b5a1-941658d349a9" />
 
@@ -157,7 +157,7 @@ However, in my implementation the generation of the signal is also a FreeRTOS ta
 
 If one were to actually prioritize saving energy, in this case it would be possible to move the generation of the signal within the Sampling taks, as the signal value is used nowhere else. In this way the generation function doesn't have to be called every miliseconds and the system has time to enter and exit sleep mode.
 
-Lastly, the higher energy spikes in this implementation are likely caused by the more computationally heavy calling of the WiFi transmitting task and the FFT computation. A good sign is that at least you can see that the spikes are less frequent than for the oversampled implementation.
+Lastly, the higher energy spikes in this implementation are likely caused by the more computationally heavy calling of the WiFi transmitting task and the FFT computation. A good sign is that at least you can see the spikes are less frequent than for the oversampled implementation.
 
 ### 2. Per-Window Execution Time
 I measured the execution time by recording the timestamp before the window execution (averaging and transmitting) and when it completed.
@@ -219,7 +219,7 @@ To get the true end-to-end latency of the LoRa transmission, it would be better 
 2 * sin(2 * PI * 3 * t) + 4 * sin(2 * PI * 5 * t)
 ```
 
-Below you can see the resulting graph of 10 second measurement of the standard signal using the adaptive sampling technique, which settled on a nyquist frequency of approximately 10 Hz.
+Below you can see the resulting graph of a 10 second measurement of the standard signal using the adaptive sampling technique, which settled on a Nyquist Frequency of approximately 10 Hz.
 
 <img width="612" height="332" alt="Scherm­afbeelding 2026-04-22 om 20 41 25" src="https://github.com/user-attachments/assets/ef2e049f-b7d6-42db-b4bd-07511dc43ff5" />
 
@@ -259,4 +259,4 @@ I have attached a `LLM.cpp` file which is the result of me basically copying the
 * The LLM uses LMIC, which (as I understand it) is a library used for briding the gap between LoRa (the physical hardware) and LoRaWAN (the networking protocol)
 * The LLM adds a 10% safety margin to the Nyquist Frequency.
 * The LLM uses mutexes, which it explained – after I prompted it some more – are basically keys used for the synchronous used of variables to prevent (for example) one task from writing variables that are currently being read. This actually seems like very useful functionality, and in hindsight I will look into for designing the FreeRTOS pipeline for our group project.
-* The LLM doesn't specify for each task what core to use. It explained it did so as to 
+* The LLM doesn't specify for each task what core to use. It explained it did so as to 'Maximize CPU Utilization', 'Simplify Code Portability' and 'Reduce Context Switching Overhead'.
