@@ -40,9 +40,7 @@ My chosen signal (actually just the same as the example one in the assignment):
 ### Architecture Diagram
 
 ``` mermaid
-%%{init: {'theme':'dark', 'themeVariables': { 'edgeLabelBackground':'#0d1117', 'primaryTextColor': '#c9d1d9', 'lineColor': '#8b949e'}}}%%
 graph TB
-    %% Definitions of outside entities
     subgraph Core1 [CORE 1: Hard Real-Time]
         direction TB
         GenTask[vSignalGeneratorTask<br/>Priority: 3 Highest<br/>Period: 1 ms]
@@ -55,11 +53,10 @@ graph TB
         MQTTTask[vMQTTTask<br/>Priority: 1]
     end
 
-    %% Internal Data Entities
     SignalVar((currentSignalValue))
     IntervalVar((samplingInterval))
-    Queue[[averageQueue<br/>Size: 10]]
-    Notify((Task<br/>Notification))
+    Queue[[averageQueue<br/>]]
+    Notify((Task Notification))
 
     subgraph Memory [Dual-Core Shared Memory]
         subgraph PingPong [Ping-Pong Buffers]
@@ -70,49 +67,25 @@ graph TB
     end
 
     %% -- Connections & Data Flow --
-
-    %% Core 1 Internal
     GenTask -->|Writes| SignalVar
     SignalVar -->|Reads| SamplerTask
 
-    %% IPC: Sampler to MQTT
     SamplerTask -->|Sends 5s Average| Queue
     Queue -->|Receives| MQTTTask
 
-    %% Memory Management by Sampler
     SamplerTask -->|Fills A| Buf1
     SamplerTask -->|Fills B| Buf2
     SamplerTask -->|Swaps Pointer| ReadyPtr
 
-    %% IPC: Sampler to FFT (Synchronization)
     SamplerTask -->|Triggers| Notify
     Notify -->|Wakes| FFTTask
 
-    %% FFT Data Access
     ReadyPtr -.->|Points to Ready Data| FFTTask
 
-    %% Adaptive Feedback Loop
     FFTTask -->|Updates| IntervalVar
     IntervalVar -->|Controls Speed| SamplerTask
 
-    %% MQTT Output
-    MQTTTask -->|Publishes JSON| ThingsBoard[ThingsBoard<br/>via Mosquitto]
-
-    %% Styling optimized for GitHub Dark Mode
-    classDef task fill:#1f6feb22,stroke:#1f6feb,stroke-width:2px,color:#c9d1d9,rx:5,ry:5;
-    classDef var fill:#d2992222,stroke:#d29922,stroke-width:2px,stroke-dasharray: 5 5,color:#c9d1d9;
-    classDef queue fill:#23863622,stroke:#2ea043,stroke-width:2px,color:#c9d1d9;
-    classDef mem fill:#21262d,stroke:#30363d,stroke-width:2px,color:#c9d1d9;
-    classDef external fill:#8957e522,stroke:#8957e5,stroke-width:2px,stroke-dasharray: 5 5,color:#c9d1d9;
-
-    class GenTask,SamplerTask,FFTTask,MQTTTask task;
-    class SignalVar,IntervalVar,Notify,ReadyPtr var;
-    class Queue queue;
-    class Buf1,Buf2,Memory,PingPong mem;
-    class ThingsBoard external;
-
-    %% Make all arrows broader and visible against dark grey
-    linkStyle default stroke-width:3px,stroke:#8b949e,color:#c9d1d9;
+    MQTTTask -->|Publishes JSON| ThingsBoard[ThingsBoard via Mosquitto]
 ```
 
 ### Maximum Sampling Frequency
@@ -148,7 +121,13 @@ if (currentTime - windowStartTime >= 5000) { // Every 5 seconds
 
 ### Communicate the aggregate value to the nearby server
 
+To send the aggregate value to a nearby edge server I used the Mosquito MQTT message broker. As you can seed in the previous code block for the aggregation calculatoin, I used a `QueueHandle_t` object to send to the MQTT Task. This is to prevent the writing of data to a variabel while the MQTT Task is busy with it. 
+
+After being woken up by the receival of the Queue, the MQTT task connects to WiFi (it it hadn't done so before), connects to the MQTT broker and then puts the float into a JSON payload format. Initially I used a 16-byte (up to 19 with minus sign and frequency above 9.99) payload: `{"average": 0.00}`, but for measuring the end-to-end latency I also included a timestamp in the payload which was measured at the time of sending to compare to the time of receival. 
+
 ### Communicate the aggregate value to the cloud
+
+Setting up the LoRa communication was quite difficult for me. First I tried setting everything with APB, but in the end I settled for OTAA as this seemed like the standard approach. Also, there were some connection issues at first (mainly codes -1116 and -1101). Most of them were solved by a simple reconnection attempt, but it also proved necessary to reset the used DevNonces in the TTN Console Join Settings every time I tried to reconnect. In the end it worked though, and you can see some of the transmitted averages (which were decoded with a JavaScript formatter) that were transmitted and received. 
 
 <img width="1130" height="362" alt="Scherm­afbeelding 2026-04-20 om 16 36 09" src="https://github.com/user-attachments/assets/edb2c289-6d03-4e22-b5a1-941658d349a9" />
 
@@ -221,8 +200,14 @@ By converting the hex capture to ASCII and subtracting the publish time from the
 | 1776707407908 | `{"average": 0.00, "ts": 1776707407893}` | 1776707407893 | **15 ms** |
 | 1776707412962 | `{"average": -0.03, "ts": 1776707412908}`| 1776707412908 | **54 ms** |
 
-**Conclusion:** The system experiences a network latency ranging between **15 ms and 54 ms**.
+**Conclusion:** The MQTT system experiences a network latency ranging between **15 ms and 54 ms**.
 
+After this I also calculated an approximation of 
+the LoRa end-to-end latency by calculating the Round Trip Time. This means that I started a timer as soon as the LoRa payload was sent, and that the timer was ended as soon as an ACK message was received back. This time does not correspon with the actual end-to-end latency as this method also has to wait until the TTN sends an acknowledgement back. Simply dividing the RTTs gives an approximation of the end-to-end latency, but since the device most likely waits a second before setting up the receive window I am not certain this reflects it perfectly. Still, below you can see the Round Trip Times.
+
+<img width="356" height="283" alt="Scherm­afbeelding 2026-04-22 om 20 26 42" src="https://github.com/user-attachments/assets/6c4321e6-2565-4258-a350-b49254be2307" />
+
+To get the true end-to-end latency of the LoRa transmission, it would be better to include a time-of-transmission timestamp with the payload (or even just printing it to Serial), which can then be used together with the receival timestamp in TNN to calculate the actual end-to-end latency.
 
 ---
 
